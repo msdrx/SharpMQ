@@ -10,8 +10,14 @@
 		<Authors>Mikheil Sadradze</Authors>
 		<RepositoryUrl>https://github.com/msdrx/SharpMQ</RepositoryUrl>
 		<PackageProjectUrl>https://github.com/msdrx/SharpMQ</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="../../README.md" Pack="true" PackagePath="\"/>
+	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)' == 'net8'">
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />

@@ -11,8 +11,14 @@
 		<Authors>Mikheil Sadradze</Authors>
 		<RepositoryUrl>https://github.com/msdrx/SharpMQ</RepositoryUrl>
 		<PackageProjectUrl>https://github.com/msdrx/SharpMQ</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="../../README.md" Pack="true" PackagePath="\"/>
+	</ItemGroup>
 
 
 	<ItemGroup>
