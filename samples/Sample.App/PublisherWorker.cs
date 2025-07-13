@@ -24,10 +24,16 @@ internal class PublisherWorker : BackgroundService
             _producer.Publish(m); // publish for ConsumerTestSimple
 
 
+            var messages = Enumerable.Range(0, 50).Select(x => new TestMessage()
+            {
+                Amount = Random.Shared.Next(1, 500) * 2m,
+                Account = $"{x}_{Random.Shared.Next(1, 500)}_account"
+            });
 
-            _producer.Publish("exchange.topic", "test_routing_key", m); // publish for TopicConsumer
+            //_producer.Publish("exchange.topic", "test_routing_key", m); // publish for TopicConsumer
+            _producer.Publish<TestMessage>("exchange.topic", "test_routing_key", messages); // publish for TopicConsumer
 
-            await Task.Delay(500);
+            await Task.Delay(2000);
         }
     }
 }
