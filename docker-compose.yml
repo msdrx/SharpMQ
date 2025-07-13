@@ -1,0 +1,60 @@
+name: sharpmq
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.1.2-management
+    container_name: rabbitmq
+    hostname: "rabbitmq"
+    ports:
+      - "5672:5672"   
+      - "15672:15672"  
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password123
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  sample.app:
+    image: ${DOCKER_REGISTRY-}sampleapp
+    build:
+      context: .
+      dockerfile: samples/Sample.App/Dockerfile
+    container_name: sampleapp
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Port=5672
+      - RabbitMQ__Username=admin
+      - RabbitMQ__Password=password123
+      - RabbitMQ__VirtualHost=/
+      - Logging__LogLevel__Default=Information
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app-network
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.100.0/24
+
