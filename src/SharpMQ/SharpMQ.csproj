@@ -8,8 +8,8 @@
 		<PackageId>SharpMQ</PackageId>
 		<Version>1.0.0</Version>
 		<Authors>Mikheil Sadradze</Authors>
-		<RepositoryUrl>TODO</RepositoryUrl>
-		<PackageProjectUrl>TODO</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/msdrx/SharpMQ</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/msdrx/SharpMQ</PackageProjectUrl>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
 
