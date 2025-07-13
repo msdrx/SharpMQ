@@ -4,7 +4,7 @@
 		<Title>SharpMQ</Title>
 		<Company>Mikheil Sadradze</Company>
 		<Description>RabbitMQ library for .NET</Description>
-		<PackageTags>RabbitMQ .NET C#</PackageTags>
+		<PackageTags>RabbitMQ .NET C# csharp rabbit message broker</PackageTags>
 		<PackageId>SharpMQ</PackageId>
 		<Version>1.0.0</Version>
 		<Authors>Mikheil Sadradze</Authors>
