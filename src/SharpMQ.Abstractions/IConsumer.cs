@@ -7,12 +7,12 @@ namespace SharpMQ.Abstractions
 {
     public interface IConsumer<T> : IDisposable where T : class
     {
-        void SubscribeAsync(Func<T, IServiceProvider, MessageContext, Task> onDequeue, 
+        Task SubscribeAsync(Func<T, IServiceProvider, MessageContext, Task> onDequeue, 
                             Func<T, IServiceProvider, MessageContext, Exception, Task> onException, 
                             RabbitSerializerOptions serializerOptions = null);
 
 
-        bool CreateNewChannelAndStartConsume(bool rethrowError = false);
+        Task<bool> CreateNewChannelAndStartConsume(bool rethrowError = false);
         bool StartConsume(bool rethrowError = false);
         IEnumerable<string> GetConsumerTags();
         void BasicCancel();

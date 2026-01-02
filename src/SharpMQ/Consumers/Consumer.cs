@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client.Events;
@@ -16,34 +17,34 @@ namespace SharpMQ.Consumers
 {
     internal class Consumer<T> : BaseConsumer, IConsumer<T> where T : class
     {
-        private readonly AsyncEventingBasicConsumer _asyncEventingBasicConsumer;
-        private readonly object _lockChannel = new object();
+        private AsyncEventingBasicConsumer _asyncEventingBasicConsumer;
+        private readonly SemaphoreSlim _channelSemaphore = new SemaphoreSlim(1, 1);
         private readonly object _lockConsumer = new object();
+        private bool _isInitialized;
 
-        public Consumer(IConnectionManager connectionManager,
+        public Consumer(IConnectionProvider connectionProvider,
                         ConsumerConfig config,
                         IServiceProvider serviceProvider,
                         ILogger logger,
                         RabbitSerializer serializer,
                         RabbitSerializerOptions defaultSerializerOptions = null)
-                        : base(connectionManager, config, serviceProvider, logger, serializer, defaultSerializerOptions)
+                        : base(connectionProvider, config, serviceProvider, logger, serializer, defaultSerializerOptions)
         {
-            _channel = _connectionManager.GetOrCreateConnection()
-                             .CreateModel()
-                             .ConfigureConsumerChannel<T>(_config);
-
-            _asyncEventingBasicConsumer = new AsyncEventingBasicConsumer(_channel);
+            // Lazy initialization - channel and consumer will be created on first use
+            _isInitialized = false;
         }
 
-        public void SubscribeAsync(
+        public async Task SubscribeAsync(
             Func<T, IServiceProvider, MessageContext, Task> onDequeue,
             Func<T, IServiceProvider, MessageContext, Exception, Task> onException,
             RabbitSerializerOptions serializerOptions = null)
         {
-            if (!_connectionManager.IsDispatchConsumersAsyncEnabled)
+            if (!_connectionProvider.IsDispatchConsumersAsyncEnabled)
             {
                 throw new ConsumerException("DispatchConsumersAsync is disabled when consumer built");
             }
+
+            await EnsureInitialized();
 
             _asyncEventingBasicConsumer.Registered += Consumer_Registered;
             _asyncEventingBasicConsumer.Unregistered += Consumer_Unregistered;
@@ -89,7 +90,7 @@ namespace SharpMQ.Consumers
             _asyncEventingBasicConsumer.StartConsume(_channel, _config, _prefetchSize, _prefetchCount);
         }
 
-        public bool CreateNewChannelAndStartConsume(bool rethrowError = false)
+        public async Task<bool> CreateNewChannelAndStartConsume(bool rethrowError = false)
         {
             try
             {
@@ -106,7 +107,8 @@ namespace SharpMQ.Consumers
                 }
                 else
                 {
-                    lock (_lockChannel)
+                    _channelSemaphore.Wait();
+                    try
                     {
                         if (!(_channel == null || _channel.IsClosed))
                         {
@@ -114,9 +116,12 @@ namespace SharpMQ.Consumers
                             return false;
                         }
 
-                        _channel = _connectionManager.GetOrCreateConnection()
-                                                     .CreateModel()
-                                                     .ConfigureConsumerChannel<T>(_config);
+                        var connection = await _connectionProvider.GetOrCreateAsync();
+                        _channel = connection.CreateModel().ConfigureConsumerChannel<T>(_config);
+                    }
+                    finally
+                    {
+                        _channelSemaphore.Release();
                     }
 
                     return StartConsume(rethrowError);
@@ -209,7 +214,6 @@ namespace SharpMQ.Consumers
         }
 
 
-
         private async Task OnException(
             MessageContext msgContext,
             BasicDeliverEventArgs basicDeliverEventArgs,
@@ -234,6 +238,7 @@ namespace SharpMQ.Consumers
             RetryOrReject(basicDeliverEventArgs);
         }
 
+
         private void RetryOrReject(BasicDeliverEventArgs ea)
         {
             if (IsMaxRetryReached(ea.BasicProperties, out int retryCount) || !_config.IsRetryEnabled())
@@ -249,26 +254,56 @@ namespace SharpMQ.Consumers
             }
             else
             {
-                ea.BasicProperties.Expiration = _config.Retry.PerMessageTtlOnRetryMs != null ? _config.Retry.PerMessageTtlOnRetryMs[retryCount] : _config.Retry.PerQueueTtlMs.ToString();
+                var ttlMs = _config.Retry.PerMessageTtlOnRetryMs[retryCount];
+
+                ea.BasicProperties.Expiration = ttlMs;
                 ea.BasicProperties.WithRetryCount(++retryCount);
-                _channel.BasicPublish(_config.Queue.Name.AsRetryExchange(), _config.Queue.Name.AsRetryQ(), mandatory: true, ea.BasicProperties, ea.Body);
+
+                _channel.BasicPublish(_config.Queue.Name.AsRetryTopicExchange(),
+                                      ttlMs,
+                                      mandatory: true,
+                                      ea.BasicProperties,
+                                      ea.Body);
+
                 if (_config.IsPublisherConfirmsEnabled())
                 {
                     _channel.WaitForConfirmsOrDie(TimeSpan.FromMilliseconds(_config.PublisherConfirms.WaitConfirmsMilliseconds));
                 }
+
                 _channel.BasicAck(ea.DeliveryTag, false);
             }
         }
 
+
+        private async Task EnsureInitialized()
+        {
+            if (_isInitialized) return;
+
+            _channelSemaphore.Wait();
+            try
+            {
+                if (_isInitialized) return;
+
+                var connection = await _connectionProvider.GetOrCreateAsync().ConfigureAwait(false);
+                _channel = connection.CreateModel().ConfigureConsumerChannel<T>(_config);
+                _asyncEventingBasicConsumer = new AsyncEventingBasicConsumer(_channel);
+                _isInitialized = true;
+            }
+            finally
+            {
+                _channelSemaphore.Release();
+            }
+        }
         protected override void Dispose(bool disposing)
         {
-            if(_asyncEventingBasicConsumer != null)
+            if (_asyncEventingBasicConsumer != null)
             {
                 _asyncEventingBasicConsumer.Registered -= Consumer_Registered;
                 _asyncEventingBasicConsumer.Unregistered -= Consumer_Unregistered;
                 _asyncEventingBasicConsumer.ConsumerCancelled -= Consumer_Cancelled;
                 _asyncEventingBasicConsumer.Shutdown -= Consumer_Shutdown;
             }
+            _channelSemaphore?.Dispose();
             base.Dispose(disposing);
         }
     }

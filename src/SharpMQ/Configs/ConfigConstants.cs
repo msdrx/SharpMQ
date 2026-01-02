@@ -8,6 +8,7 @@ namespace SharpMQ.Configs
         {
             public const int MAX_RECONNECT_COUNT = 3;
             public const int RECONNECT_INTERVAL_SECONDS = 10;
+            public const int NETWORK_RECOVERY_INTERVAL_SECONDS = 5;
 
             public const uint PREFETCH_SIZE = 0u;
             public const ushort PREFETCH_COUNT = 1;

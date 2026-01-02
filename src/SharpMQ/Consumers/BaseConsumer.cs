@@ -16,14 +16,14 @@ namespace SharpMQ.Consumers
 
         protected readonly ConsumerConfig _config;
         protected readonly IServiceProvider _serviceProvider;
-        protected readonly IConnectionManager _connectionManager;
+        protected readonly IConnectionProvider _connectionProvider;
         protected readonly ILogger _logger;
         protected IModel _channel;
 
         protected readonly RabbitSerializer _serializer;
         protected readonly RabbitSerializerOptions _defaultSerializerOptions;
 
-        protected BaseConsumer(IConnectionManager connectionManager,
+        protected BaseConsumer(IConnectionProvider connectionProvider,
                                ConsumerConfig config,
                                IServiceProvider serviceProvider,
                                ILogger logger,
@@ -36,7 +36,7 @@ namespace SharpMQ.Consumers
             _prefetchSize = _config.PrefetchSize ?? ConfigConstants.Default.PREFETCH_SIZE;
             _prefetchCount = _config.PrefechCount ?? ConfigConstants.Default.PREFETCH_COUNT;
 
-            _connectionManager = connectionManager;
+            _connectionProvider = connectionProvider;
             _serviceProvider = serviceProvider;
             _serializer = serializer;
             _defaultSerializerOptions = defaultSerializerOptions;
@@ -103,7 +103,7 @@ namespace SharpMQ.Consumers
 
             try
             {
-                _connectionManager?.Dispose();
+                _connectionProvider?.Dispose();
             }
             catch (ObjectDisposedException)
             {

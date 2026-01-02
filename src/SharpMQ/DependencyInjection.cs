@@ -37,6 +37,7 @@ namespace SharpMQ
             if (producerAndServerConfigs.Select(x => x.ProducerKey).Distinct().Count() != producerAndServerConfigs.Length) throw new RabbitMqConfigValidationException("producerKey must be unique");
             if (!producerAndServerConfigs.Any(x => x.ProducerKey == mainProducerKey)) throw new RabbitMqConfigValidationException($"{mainProducerKey} not found in producerAndServerConfigs list");
 
+
             services.AddSingleton<IProducerFactory, ProducerFactory>(provider =>
             {
                 var factory = new ProducerFactory();
@@ -50,34 +51,7 @@ namespace SharpMQ
             services.AddSingleton<IProducer>(provider =>
             {
                 var factory = provider.GetRequiredService<IProducerFactory>();
-                return factory.Get(producerAndServerConfigs.First(x => x.ProducerKey == mainProducerKey).ProducerKey);
-            });
-
-            return services;
-        }
-
-        /// <summary>
-        /// Registers Singleton <see cref="IRawConnectionAccessor"/> service
-        /// </summary>
-        /// <param name="services"></param>
-        /// <param name="serverConfig"></param>
-        /// <param name="clientProvidedNameSuffix"></param>
-        /// <returns></returns>
-        /// <exception cref="RabbitMqConfigValidationException"></exception>
-        public static IServiceCollection AddRawConnection(this IServiceCollection services,
-                                                          RabbitMqServerConfig serverConfig,
-                                                          string clientProvidedNameSuffix = "raw-connection")
-        {
-            if (serverConfig == null)
-            {
-                throw new RabbitMqConfigValidationException("serverConfig is null");
-            }
-            serverConfig.Validate();
-
-            services.AddSingleton<IRawConnectionAccessor, RawConnectionAccessor>(sp =>
-            {
-                var cm = new ConnectionManager(serverConfig, sp.GetRequiredService<ILogger<RawConnectionAccessor>>(), true, clientProvidedNameSuffix: clientProvidedNameSuffix);
-                return new RawConnectionAccessor(cm);
+                return factory.Get(mainProducerKey);
             });
 
             return services;
@@ -134,11 +108,12 @@ namespace SharpMQ
             }
             producerConfig.Validate();
 
-            var cm = new ConnectionManager(serverConfig, serviceProvider.GetRequiredService<ILogger<ConnectionManager>>(), true, clientProvidedNameSuffix: producerKey);
-            var cpm = new ChannelPool(cm, producerConfig.ChannelPool.MinPoolSize, producerConfig.ChannelPool.MaxPoolSize, producerConfig.ChannelPool.WaitTimeoutMs);
-            var p = new Producer(cpm, producerConfig, serviceProvider.GetRequiredService<ILogger<Producer>>(), serializer, defaultSerializerOptions);
+            var cpLogger = serviceProvider.GetRequiredService<ILogger<ConnectionProvider>>();
+            var connectionProvider = ConnectionProvider.Create(serverConfig,cpLogger, true, producerKey);
+            var channelPool = new ChannelPool(connectionProvider, producerConfig.ChannelPool.MinPoolSize, producerConfig.ChannelPool.MaxPoolSize, producerConfig.ChannelPool.WaitTimeoutMs);
+            var producer = new Producer(channelPool, producerConfig, serviceProvider.GetRequiredService<ILogger<Producer>>(), serializer, defaultSerializerOptions);
 
-            factory.Add(producerKey, p);
+            factory.Add(producerKey, producer);
         }
     }
 }

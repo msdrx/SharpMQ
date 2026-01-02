@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SharpMQ.Abstractions;
 using SharpMQ.Configs;
@@ -13,7 +15,7 @@ namespace SharpMQ.Producers
 {
     internal class Producer : IProducer
     {
-        private readonly IChannelPool _channelPoolManager;
+        private readonly IChannelPool _channelPool;
         private readonly ProducerConfig _config;
         private readonly ILogger<Producer> _logger;
 
@@ -21,7 +23,7 @@ namespace SharpMQ.Producers
         private readonly RabbitSerializerOptions _defaultSerializerOptions;
         private readonly ConcurrentDictionary<Type, (string queue, string directExchange)> _messageTypeNamesCache = new ConcurrentDictionary<Type, (string queue, string directExchange)>();
 
-        public Producer(IChannelPool channelPoolManager,
+        public Producer(IChannelPool channelPool,
                         ProducerConfig config,
                         ILogger<Producer> logger,
                         RabbitSerializer serializer,
@@ -29,25 +31,25 @@ namespace SharpMQ.Producers
         {
             _config = config ?? throw new ArgumentNullException(nameof(config), "producer config is null");
             _logger = logger;
-            _channelPoolManager = channelPoolManager;
+            _channelPool = channelPool;
 
             _serializer = serializer;
             _defaultSerializerOptions = defaultSerializerOptions;
         }
 
-
-        public void Publish<T>(
+        public async Task PublishAsync<T>(
             string exchange,
             string routingKey,
             T message,
             int? priority = null,
             long expirationMs = 0,
-            RabbitSerializerOptions serializerOptions = null)
+            RabbitSerializerOptions serializerOptions = null,
+            CancellationToken cancellationToken = default)
         {
             IModel channel = default;
             try
             {
-                channel = _channelPoolManager.GetChannel();
+                channel = await _channelPool.GetChannelAsync(cancellationToken).ConfigureAwait(false);
 
                 var enabled = _config.IsPublisherConfirmsEnabled();
                 if (enabled) channel.ConfirmSelect();
@@ -57,9 +59,7 @@ namespace SharpMQ.Producers
 
                 channel.BasicPublish(exchange, routingKey, mandatory: true, props, message.ToByteArray(_serializer, serializerOptions ?? _defaultSerializerOptions));
 
-
                 if (enabled) channel.WaitForConfirmsOrDie(TimeSpan.FromMilliseconds(_config.PublisherConfirms.WaitConfirmsMilliseconds));
-
             }
             catch (Exception ex)
             {
@@ -68,28 +68,28 @@ namespace SharpMQ.Producers
             }
             finally
             {
-                _channelPoolManager.AddOrCloseChannel(channel);
+                await _channelPool.AddOrCloseChannelAsync(channel).ConfigureAwait(false);
             }
         }
 
-        public void Publish<T>(string exchange,
+        public async Task PublishAsync<T>(string exchange,
             string routingKey,
             IEnumerable<T> messages,
             int? priority = null,
             long expirationMs = 0,
             RabbitSerializerOptions serializerOptions = null,
-            int batchSize = 20)
+            int batchSize = 20,
+            CancellationToken cancellationToken = default)
         {
             IModel channel = default;
             try
             {
-                channel = _channelPoolManager.GetChannel();
+                channel = await _channelPool.GetChannelAsync(cancellationToken).ConfigureAwait(false);
                 var enabled = _config.IsPublisherConfirmsEnabled();
                 if (enabled) channel.ConfirmSelect();
 
                 var props = channel.WithPersistens().WithPriority(priority);
                 if (expirationMs > 100) props.Expiration = expirationMs.ToString();
-
 
                 foreach (var batch in messages.Chunk(batchSize))
                 {
@@ -98,7 +98,7 @@ namespace SharpMQ.Producers
                     foreach (var message in batch)
                     {
                         var body = message.ToReadOnlyMemory(_serializer, serializerOptions ?? _defaultSerializerOptions);
-                        
+
                         publishBatch.Add(exchange, routingKey, mandatory: true, props, body);
                     }
 
@@ -113,28 +113,30 @@ namespace SharpMQ.Producers
             }
             finally
             {
-                _channelPoolManager.AddOrCloseChannel(channel);
+                await _channelPool.AddOrCloseChannelAsync(channel).ConfigureAwait(false);
             }
         }
 
-        public void Publish<T>(
+        public async Task PublishAsync<T>(
             T message,
             int? priority = null,
             long expirationMs = 0,
-            RabbitSerializerOptions serializerOptions = null)
+            RabbitSerializerOptions serializerOptions = null,
+            CancellationToken cancellationToken = default)
         {
             var (queue, directExchange) = GetOrAddMessageTypeName<T>();
-            Publish<T>(directExchange, queue, message, priority, expirationMs, serializerOptions);
+            await PublishAsync<T>(directExchange, queue, message, priority, expirationMs, serializerOptions, cancellationToken).ConfigureAwait(false);
         }
 
-        public void Publish<T>(IEnumerable<T> messages,
+        public async Task PublishAsync<T>(IEnumerable<T> messages,
                       int? priority = null,
                       long expirationMs = 0,
                       RabbitSerializerOptions serializerOptions = null,
-                      int batchSize = 20)
+                      int batchSize = 20,
+                      CancellationToken cancellationToken = default)
         {
             var (queue, directExchange) = GetOrAddMessageTypeName<T>();
-            Publish<T>(directExchange, queue, messages, priority, expirationMs, serializerOptions, batchSize);
+            await PublishAsync<T>(directExchange, queue, messages, priority, expirationMs, serializerOptions, batchSize, cancellationToken).ConfigureAwait(false);
         }
 
         private (string queue, string directExchange) GetOrAddMessageTypeName<T>()
@@ -165,7 +167,7 @@ namespace SharpMQ.Producers
         {
             try
             {
-                _channelPoolManager?.Dispose();
+                _channelPool?.Dispose();
             }
             catch (ObjectDisposedException)
             {

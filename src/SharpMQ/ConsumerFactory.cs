@@ -32,13 +32,13 @@ namespace SharpMQ
             serverConfig.Validate();
             consumerConfig.Validate();
 
-            var connectionManagerLogger = serviceProvider.GetRequiredService<ILogger<ConnectionManager>>();
-            if (connectionManagerLogger == null) throw new RabbitMqConfigValidationException("RabbitMQ can't get logger from service provider");
-
-            ConnectionManager cm = null;
+            IConnectionProvider connectionProvider = null;
             if (singleConnectionPerConsumerGroup)
             {
-                cm = new ConnectionManager(serverConfig, connectionManagerLogger, true, consumerClientProvidedName);
+                connectionProvider = ConnectionProvider.Create(serverConfig,
+                                                               serviceProvider.GetRequiredService<ILogger<ConnectionProvider>>(),
+                                                               true,
+                                                               consumerClientProvidedName);
             }
 
             var consumerLogger = serviceProvider.GetRequiredService<ILogger<Consumer<T>>>();
@@ -47,10 +47,13 @@ namespace SharpMQ
             {
                 if (!singleConnectionPerConsumerGroup)
                 {
-                    cm = new ConnectionManager(serverConfig, connectionManagerLogger, true, $"{consumerClientProvidedName}:{i}");
+                    connectionProvider = ConnectionProvider.Create(serverConfig,
+                                                                   serviceProvider.GetRequiredService<ILogger<ConnectionProvider>>(),
+                                                                   true,
+                                                                   $"{consumerClientProvidedName}:{i}");
                 }
 
-                consumers.Add(new Consumer<T>(cm, consumerConfig, serviceProvider, consumerLogger, serializer, defaultSerializerOptions));
+                consumers.Add(new Consumer<T>(connectionProvider, consumerConfig, serviceProvider, consumerLogger, serializer, defaultSerializerOptions));
             }
 
             return consumers.AsReadOnly();

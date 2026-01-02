@@ -71,14 +71,30 @@ namespace SharpMQ.Extensions
         {
             return queueName + ".direct";
         }
-        public static string AsRetryQ(this string queueName)
+        public static string AsRetryTopicExchange(this string queueName)
         {
-            return queueName + ".RetryQ";
+            return queueName + ".topic.Retry";
         }
 
-        public static string AsRetryExchange(this string queueName)
+        public static string AsRetryQ(this string queueName, long ttlMs)
         {
-            return queueName + ".direct.Retry";
+            return $"{queueName}.RetryQ.{ttlMs.ToHumanReadableTime()}";
+        }
+
+        public static string ToHumanReadableTime(this long milliseconds)
+        {
+            if (milliseconds <= 0) throw new ArgumentException($"milliseconds must greater then 0");
+
+            var time = TimeSpan.FromMilliseconds(milliseconds);
+            var str = string.Empty;
+
+            if (time.Days > 0) str += $"{time.Days}d";
+            if (time.Hours > 0) str += $"{time.Hours}h";
+            if (time.Minutes > 0) str += $"{time.Minutes}m";
+            if (time.Seconds > 0) str += $"{time.Seconds}s";
+            if (time.Milliseconds > 0) str += $"{time.Milliseconds}ms";
+
+            return str;
         }
 
         internal static MessageBasicDeliverEventArgs ToMessageBasicDeliverEventArgs(this BasicDeliverEventArgs args)

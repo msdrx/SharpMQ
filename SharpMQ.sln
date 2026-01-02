@@ -19,6 +19,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sample.App", "samples\Sampl
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{81DDED9D-158B-E303-5F62-77A2896D2A5A}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{C4779BB2-B4AE-47AB-BA3B-8B12C42FEA52}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpMQ.Unit.Test", "tests\SharpMQ.Unit.Test\SharpMQ.Unit.Test.csproj", "{265CA311-D6CD-42D9-CF33-0DF48BDF1217}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -49,6 +53,10 @@ Global
 		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{265CA311-D6CD-42D9-CF33-0DF48BDF1217}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{265CA311-D6CD-42D9-CF33-0DF48BDF1217}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{265CA311-D6CD-42D9-CF33-0DF48BDF1217}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{265CA311-D6CD-42D9-CF33-0DF48BDF1217}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -59,6 +67,7 @@ Global
 		{340A9708-FD2B-4BD6-8F1C-77AD5E682137} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{534A6FB0-7318-4993-A1FC-5164758909F1} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{EAE0F540-1812-4251-AD89-8FF9D27C7EB9} = {6266305E-072F-4CEE-8E34-DEF2EE7118DA}
+		{265CA311-D6CD-42D9-CF33-0DF48BDF1217} = {C4779BB2-B4AE-47AB-BA3B-8B12C42FEA52}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {25C77FD9-3F88-494C-855C-6405E3DF3586}

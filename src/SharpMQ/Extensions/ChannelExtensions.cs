@@ -140,31 +140,35 @@ namespace SharpMQ.Extensions
 
         private static IModel ConfigureRetry(this IModel channel, ConsumerConfig config)
         {
-            var retryQueue = config.Queue.Name.AsRetryQ();
-            var retryExchange = config.Queue.Name.AsRetryExchange();
+            var retryTopicExchange = config.Queue.Name.AsRetryTopicExchange();
+            channel.AddExchange(retryTopicExchange, ConfigConstants.Exchanges.Topic);
 
-            channel.AddQueue(retryQueue, new QueueArgConfig[]
-                   {
-                        new QueueArgConfig()
-                        {
-                            Key = ConfigConstants.QueueArgKeys.MessageTTL,
-                            Value = config.Retry.PerQueueTtlMs
-                        },
-                        new QueueArgConfig()
-                        {
-                            Key = ConfigConstants.QueueArgKeys.DLExchage,
-                            Value = config.Queue.Name.AsDirectExchange()
-                        },
-                        new QueueArgConfig()
-                        {
-                            Key = ConfigConstants.QueueArgKeys.DLExchangeRoutingKey,
-                            Value = config.Queue.Name
-                        }
-                    });
+            foreach (var ttlMsStr in config.Retry.PerMessageTtlOnRetryMs)
+            {
+                var ttlMs = long.Parse(ttlMsStr);
+                var retryQueue = config.Queue.Name.AsRetryQ(ttlMs);
 
-            channel.AddExchange(retryExchange, ConfigConstants.Exchanges.Direct);
+                channel.AddQueue(retryQueue, new QueueArgConfig[]
+                {
+                    new QueueArgConfig()
+                    {
+                        Key = ConfigConstants.QueueArgKeys.MessageTTL,
+                        Value = ttlMs
+                    },
+                    new QueueArgConfig()
+                    {
+                        Key = ConfigConstants.QueueArgKeys.DLExchage,
+                        Value = config.Queue.Name.AsDirectExchange()
+                    },
+                    new QueueArgConfig()
+                    {
+                        Key = ConfigConstants.QueueArgKeys.DLExchangeRoutingKey,
+                        Value = config.Queue.Name
+                    }
+                });
 
-            channel.AddBinding(retryQueue, retryExchange, retryQueue);
+                channel.AddBinding(retryQueue, retryTopicExchange, ttlMsStr);
+            }
 
             return channel;
         }

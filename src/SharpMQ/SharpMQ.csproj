@@ -6,13 +6,15 @@
 		<Description>RabbitMQ library for .NET</Description>
 		<PackageTags>RabbitMQ .NET C# csharp rabbit message broker</PackageTags>
 		<PackageId>SharpMQ</PackageId>
-		<Version>1.0.0</Version>
+		<Version>1.1.0</Version>
 		<Authors>Mikheil Sadradze</Authors>
 		<RepositoryUrl>https://github.com/msdrx/SharpMQ</RepositoryUrl>
 		<PackageProjectUrl>https://github.com/msdrx/SharpMQ</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<InternalsVisibleTo>SharpMQ.Unit.Test</InternalsVisibleTo>
+		<InternalsVisibleTo>DynamicProxyGenAssembly2</InternalsVisibleTo>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -41,6 +43,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="RabbitMQ.Client" Version="6.4.0" />
+		<PackageReference Include="System.Threading.Channels" Version="6.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>

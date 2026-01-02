@@ -18,6 +18,7 @@ namespace SharpMQ.Configs
 
         public int? ReconnectCount { get; set; }
         public int? ReconnectIntervalInSeconds { get; set; }
+        public int? NetworkRecoveryIntervalInSeconds { get; set; }
 
         public IEnumerable<AmqpTcpEndpoint> MqHosts()
         {
@@ -37,6 +38,8 @@ namespace SharpMQ.Configs
             if (ReconnectCount.HasValue && ReconnectCount <= 0) throw new RabbitMqConfigValidationException("RabbitMq Server ReconnectCount is <= 0");
 
             if (ReconnectIntervalInSeconds.HasValue && ReconnectIntervalInSeconds <= 0) throw new RabbitMqConfigValidationException("RabbitMq Server ReconnectIntervalInSeconds is <= 0");
+
+            if (NetworkRecoveryIntervalInSeconds.HasValue && NetworkRecoveryIntervalInSeconds <= 0) throw new RabbitMqConfigValidationException("RabbitMq Server NetworkRecoveryIntervalInSeconds is <= 0");
 
             if (Hosts == null || !Hosts.Any() || Hosts.Any(x => string.IsNullOrWhiteSpace(x)))
             {
