@@ -1,4 +1,5 @@
 using Sample.App;
+using Sample.App.Examples;
 using Sample.App.Shared;
 using SharpMQ;
 using SharpMQ.Configs;
@@ -15,9 +16,9 @@ builder.Services
     .AddProducer("topic-producer", producerConfig, serverConfig, new CustomJsonSerializer())
     .OpenProducersConnectionsOnHostStartup();
 
-//builder.Services.AddHostedService<ConsumerWorker>();
-//builder.Services.AddHostedService<PublisherWorker>();
-builder.Services.AddHostedService<RetryExampleWorker>();
+//builder.Services.AddHostedService<TopicExchangeExample>();
+builder.Services.AddHostedService<BasicQueueExample>();
+//builder.Services.AddHostedService<RetryExampleWorker>();
 
 var host = builder.Build();
 host.Run();
