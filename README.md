@@ -11,10 +11,10 @@
 - **Serializer Agnostic**: Bring your own serializer (JSON, Protobuf, etc.)
 
 ## You should use SharpMQ if
-  You want production-ready patterns out of the box
-  You need retry/dead letter queue handling
-  You want to focus on business logic, not RabbitMQ plumbing
-  You need channel pooling for high-throughput scenarios
+-  You want production-ready patterns out of the box
+- You need retry/dead letter queue handling
+- You want to focus on business logic, not RabbitMQ plumbing
+- You need channel pooling for high-throughput scenarios
 
 ## Installation
 
