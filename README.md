@@ -112,7 +112,7 @@ var consumerConfig = new ConsumerConfig
     Retry = new RetryConfig
     {
         // Retry with 5s, 30s, 2min TTLs
-        PerMessageTtlOnRetryMs = new[] { "5000", "30000", "120000" }
+        PerMessageTtlOnRetryMs = new[] { 5000, 30000, 120000 }
     }
 };
 
@@ -176,7 +176,7 @@ var consumerConfig = new ConsumerConfig
     Retry = new RetryConfig
     {
         // 3 retry attempts: 5s, 30s, 2min
-        PerMessageTtlOnRetryMs = new[] { "5000", "30000", "120000" }
+        PerMessageTtlOnRetryMs = new[] { 5000, 30000, 120000 }
     },
     PublisherConfirms = new PublisherConfirmsConfig
     {
