@@ -18,9 +18,9 @@ public class TopicExchangeExample : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<TopicExchangeExample> _logger;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _usaOrderConsumers;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _europeOrderConsumers;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _logConsumers;
+    private IConsumerGroup<TestMessage>? _usaOrderConsumers;
+    private IConsumerGroup<TestMessage>? _europeOrderConsumers;
+    private IConsumerGroup<TestMessage>? _logConsumers;
 
     public TopicExchangeExample(
         IProducer producer,
@@ -47,7 +47,7 @@ public class TopicExchangeExample : BackgroundService
             new CustomJsonSerializer(),
             consumerClientProvidedName: "UsaOrderConsumer");
 
-        _usaOrderConsumers.SubscribeAsync(
+        await _usaOrderConsumers.SubscribeAsync(
             async (message, sp, msgContext) =>
             {
                 await Task.Delay(100);
@@ -59,7 +59,8 @@ public class TopicExchangeExample : BackgroundService
                 await Task.Delay(100);
                 _logger.LogError("[USA ORDERS ERROR] {Message}", message);
             },
-            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault));
+            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault),
+            cancellationToken: stoppingToken);
 
         // Consumer 2: Europe orders (orders.europe.*)
         var europeOrderConfig = _configuration.GetRequiredSection("TopicConsumerEuropeOrders").Get<ConsumerConfig>();
@@ -70,7 +71,7 @@ public class TopicExchangeExample : BackgroundService
             new CustomJsonSerializer(),
             consumerClientProvidedName: "EuropeOrderConsumer");
 
-        _europeOrderConsumers.SubscribeAsync(
+        await _europeOrderConsumers.SubscribeAsync(
             async (message, sp, msgContext) =>
             {
                 await Task.Delay(100);
@@ -82,7 +83,8 @@ public class TopicExchangeExample : BackgroundService
                 await Task.Delay(100);
                 _logger.LogError("[EUROPE ORDERS ERROR] {Message}", message);
             },
-            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault));
+            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault),
+            cancellationToken: stoppingToken);
 
         // Consumer 3: All logs (logs.#)
         var logConfig = _configuration.GetRequiredSection("TopicConsumerLogs").Get<ConsumerConfig>();
@@ -93,7 +95,7 @@ public class TopicExchangeExample : BackgroundService
             new CustomJsonSerializer(),
             consumerClientProvidedName: "LogConsumer");
 
-        _logConsumers.SubscribeAsync(
+        await _logConsumers.SubscribeAsync(
             async (message, sp, msgContext) =>
             {
                 await Task.Delay(100);
@@ -105,7 +107,8 @@ public class TopicExchangeExample : BackgroundService
                 await Task.Delay(100);
                 _logger.LogError("[LOGS ERROR] {Message}", message);
             },
-            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault));
+            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault),
+            cancellationToken: stoppingToken);
 
         // Wait for consumers to be ready
         await Task.Delay(3000, stoppingToken);
@@ -144,20 +147,9 @@ public class TopicExchangeExample : BackgroundService
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        void DisposeConsumers(IReadOnlyCollection<IConsumer<TestMessage>>? consumers)
-        {
-            if (consumers != null)
-            {
-                foreach (var consumer in consumers)
-                {
-                    consumer?.Dispose();
-                }
-            }
-        }
-
-        DisposeConsumers(_usaOrderConsumers);
-        DisposeConsumers(_europeOrderConsumers);
-        DisposeConsumers(_logConsumers);
+        _usaOrderConsumers?.Dispose();
+        _europeOrderConsumers?.Dispose();
+        _logConsumers?.Dispose();
 
         return base.StopAsync(cancellationToken);
     }

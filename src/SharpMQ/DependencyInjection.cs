@@ -58,7 +58,7 @@ namespace SharpMQ
         }
 
         /// <summary>
-        /// Registers Singleton <see cref="IProducer"/>-ს and <see cref="IProducerFactory"/> services (only one producer)
+        /// Registers Singleton <see cref="IProducer"/> and <see cref="IProducerFactory"/> services (only one producer)
         /// </summary>
         /// <param name="services"></param>
         /// <param name="producerKey"></param>
@@ -109,11 +109,16 @@ namespace SharpMQ
             producerConfig.Validate();
 
             var cpLogger = serviceProvider.GetRequiredService<ILogger<ConnectionProvider>>();
-            var connectionProvider = ConnectionProvider.Create(serverConfig,cpLogger, true, producerKey);
-            var channelPool = new ChannelPool(connectionProvider, producerConfig.ChannelPool.MinPoolSize, producerConfig.ChannelPool.MaxPoolSize, producerConfig.ChannelPool.WaitTimeoutMs);
+            var connectionProvider = ConnectionProvider.Create(serverConfig, cpLogger, true, producerKey);
+            var channelPool = new ChannelPool(connectionProvider, producerConfig.ChannelPool.MinPoolSize, producerConfig.ChannelPool.MaxPoolSize, producerConfig.ChannelPool.WaitTimeoutMs, producerConfig.IsPublisherConfirmsEnabled());
             var producer = new Producer(channelPool, producerConfig, serviceProvider.GetRequiredService<ILogger<Producer>>(), serializer, defaultSerializerOptions);
 
             factory.Add(producerKey, producer);
+
+            if (factory is ProducerFactory producerFactory)
+            {
+                producerFactory.TrackDisposable(connectionProvider);
+            }
         }
     }
 }

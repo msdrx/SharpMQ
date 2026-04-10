@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using SharpMQ.Configs;
 using SharpMQ.Connections;
 using SharpMQ.Serializer.Abstractions;
+using SharpMQ.Extensions;
 
 namespace SharpMQ.Consumers
 {
@@ -22,31 +23,32 @@ namespace SharpMQ.Consumers
 
         protected readonly RabbitSerializer _serializer;
         protected readonly RabbitSerializerOptions _defaultSerializerOptions;
+        private readonly bool _ownsConnection;
 
         protected BaseConsumer(IConnectionProvider connectionProvider,
                                ConsumerConfig config,
                                IServiceProvider serviceProvider,
                                ILogger logger,
                                RabbitSerializer serializer,
-                               RabbitSerializerOptions defaultSerializerOptions)
+                               RabbitSerializerOptions defaultSerializerOptions,
+                               bool ownsConnection)
         {
             _config = config;
 
             _logger = logger;
             _prefetchSize = _config.PrefetchSize ?? ConfigConstants.Default.PREFETCH_SIZE;
-            _prefetchCount = _config.PrefechCount ?? ConfigConstants.Default.PREFETCH_COUNT;
+            _prefetchCount = _config.PrefetchCount ?? ConfigConstants.Default.PREFETCH_COUNT;
 
             _connectionProvider = connectionProvider;
             _serviceProvider = serviceProvider;
             _serializer = serializer;
             _defaultSerializerOptions = defaultSerializerOptions;
+            _ownsConnection = ownsConnection;
         }
         protected bool IsMaxRetryReached(IBasicProperties basicProperties, out int count)
         {
-            object retryCountObj = null;
-            basicProperties.Headers?.TryGetValue(ConfigConstants.BasicPropertyHeaders.XRetries, out retryCountObj);
+            count = basicProperties.GetRetryCount(_config.Retry.PerMessageTtlOnRetryMs.Length);
 
-            count = retryCountObj == null ? 0 : (int)retryCountObj;
             return count >= _config.Retry.PerMessageTtlOnRetryMs.Length;
         }
 
@@ -101,13 +103,16 @@ namespace SharpMQ.Consumers
                 }
             }
 
-            try
+            if (_ownsConnection)
             {
-                _connectionProvider?.Dispose();
-            }
-            catch (ObjectDisposedException)
-            {
-                //if already disposed its ok
+                try
+                {
+                    _connectionProvider?.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    //if already disposed its ok
+                }
             }
 
         }

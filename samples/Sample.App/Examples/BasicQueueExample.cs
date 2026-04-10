@@ -14,7 +14,7 @@ public class BasicQueueExample : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<BasicQueueExample> _logger;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _consumers;
+    private IConsumerGroup<TestMessage>? _consumers;
 
     public BasicQueueExample(
         IProducer producer,
@@ -41,7 +41,7 @@ public class BasicQueueExample : BackgroundService
             new CustomJsonSerializer(),
             consumerClientProvidedName: "BasicQueueConsumer");
 
-        _consumers.SubscribeAsync(
+        await _consumers.SubscribeAsync(
             async (message, sp, msgContext) =>
             {
                 await Task.Delay(100);
@@ -52,7 +52,8 @@ public class BasicQueueExample : BackgroundService
                 await Task.Delay(100);
                 _logger.LogError("[BasicQueue] Error: {Message}", message);
             },
-            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault));
+            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault),
+            cancellationToken: stoppingToken);
 
         // Publish messages
         await Task.Delay(3000, stoppingToken);
@@ -74,13 +75,7 @@ public class BasicQueueExample : BackgroundService
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_consumers != null)
-        {
-            foreach (var consumer in _consumers)
-            {
-                consumer?.Dispose();
-            }
-        }
+        _consumers?.Dispose();
         return base.StopAsync(cancellationToken);
     }
 }

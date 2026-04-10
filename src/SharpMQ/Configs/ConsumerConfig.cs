@@ -8,7 +8,20 @@ namespace SharpMQ.Configs
     {
         public uint ConsumersCount { get; set; }
         public uint? PrefetchSize { get; set; }
-        public ushort? PrefechCount { get; set; }
+        /// <summary>
+        /// Gets or sets the prefetch count for the consumer.
+        /// </summary>
+        public ushort? PrefetchCount { get; set; }
+
+        /// <summary>
+        /// Gets or sets the prefetch count for the consumer.
+        /// </summary>
+        [Obsolete("Use PrefetchCount instead.")]
+        public ushort? PrefechCount
+        {
+            get => PrefetchCount;
+            set => PrefetchCount = value;
+        }
         public bool DisableDeadLettering { get; set; }
         public ExchangeParamsConfig[] Exchanges { get; set; }
         public QueueParamsConfig Queue { get; set; }

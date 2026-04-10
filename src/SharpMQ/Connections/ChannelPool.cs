@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -12,10 +12,11 @@ namespace SharpMQ.Connections
         private readonly int _minPoolSize;
         private readonly int _maxPoolSize;
         private readonly int _waitTimeoutMs;
+        private readonly bool _enablePublisherConfirms;
 
         private readonly SemaphoreSlim _poolLocker = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _poolSizeGate;
         private readonly Channel<IModel> _channelPool;
-        private int _currentPoolSize;
         private bool _isInitialized;
         private bool _disposed;
 
@@ -23,7 +24,8 @@ namespace SharpMQ.Connections
         public ChannelPool(IConnectionProvider connectionProvider,
             int minPoolSize,
             int maxPoolSize,
-            int waitTimeoutMs
+            int waitTimeoutMs,
+            bool enablePublisherConfirms = false
             )
         {
             _connectionProvider = connectionProvider;
@@ -31,6 +33,11 @@ namespace SharpMQ.Connections
             _minPoolSize = minPoolSize;
             _maxPoolSize = maxPoolSize;
             _waitTimeoutMs = waitTimeoutMs;
+            _enablePublisherConfirms = enablePublisherConfirms;
+
+            // Semaphore acts as a concurrency gate: at most _maxPoolSize channels can exist at any time.
+            // Each permit represents the right to have one channel outstanding (not in the pool).
+            _poolSizeGate = new SemaphoreSlim(_maxPoolSize, _maxPoolSize);
 
             // Create unbounded channel for async operations
             _channelPool = Channel.CreateUnbounded<IModel>(new UnboundedChannelOptions
@@ -38,7 +45,6 @@ namespace SharpMQ.Connections
                 SingleReader = false,
                 SingleWriter = false
             });
-            _currentPoolSize = 0;
             _isInitialized = false;
             _disposed = false;
         }
@@ -48,96 +54,78 @@ namespace SharpMQ.Connections
         public async Task<IModel> GetChannelAsync(CancellationToken cancellationToken = default)
         {
             // Lazy initialization on first use
-            await EnsurePoolInitialized(cancellationToken);
+            await EnsurePoolInitialized(cancellationToken).ConfigureAwait(false);
+
+            // Acquire a permit from the pool size gate. This guarantees we never exceed _maxPoolSize
+            // outstanding channels, even under heavy concurrent access.
+            if (!await _poolSizeGate.WaitAsync(_waitTimeoutMs, cancellationToken).ConfigureAwait(false))
+            {
+                throw new InvalidOperationException(
+                    $"Channel pool exhausted. Maximum pool size ({_maxPoolSize}) reached.");
+            }
 
             try
             {
-                // Try to get channel from pool with timeout
-                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                // Try to get an existing healthy channel from the pool
+                while (_channelPool.Reader.TryRead(out var pooledChannel))
                 {
-                    cts.CancelAfter(_waitTimeoutMs);
-
-                    if (await _channelPool.Reader.WaitToReadAsync(cts.Token).ConfigureAwait(false))
+                    if (IsChannelHealthy(pooledChannel))
                     {
-                        if (_channelPool.Reader.TryRead(out var channel))
-                        {
-                            // Validate channel before returning
-                            if (IsChannelHealthy(channel))
-                            {
-                                Interlocked.Decrement(ref _currentPoolSize);
-                                return channel;
-                            }
-
-                            // Channel is unhealthy, dispose it and create new one
-                            DisposeChannel(channel);
-                            Interlocked.Decrement(ref _currentPoolSize);
-                        }
+                        return pooledChannel;
                     }
+
+                    // Channel is unhealthy, dispose it (the permit we hold covers this slot)
+                    DisposeChannel(pooledChannel);
                 }
 
-                // Pool exhausted or timeout - check if we can create new channel
-                int currentSize = Interlocked.Increment(ref _currentPoolSize);
-                if (currentSize <= _maxPoolSize)
-                {
-                    var connection = await _connectionProvider.GetOrCreateAsync(cancellationToken).ConfigureAwait(false);
-                    return connection.CreateModel();
-                }
-                else
-                {
-                    // Exceeded max pool size, decrement and throw
-                    Interlocked.Decrement(ref _currentPoolSize);
-                    throw new InvalidOperationException($"Channel pool exhausted. Maximum pool size ({_maxPoolSize}) reached.");
-                }
+                // No healthy channel available in pool — create a new one
+                var connection = await _connectionProvider.GetOrCreateAsync(cancellationToken).ConfigureAwait(false);
+                var newChannel = connection.CreateModel();
+                if (_enablePublisherConfirms) newChannel.ConfirmSelect();
+                return newChannel;
             }
-            catch (InvalidOperationException)
+            catch
             {
+                // On any failure after acquiring the permit, release it so others can proceed
+                _poolSizeGate.Release();
                 throw;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception)
-            {
-                // On any error, try to create a new channel if under limit
-                int currentSize = Interlocked.Increment(ref _currentPoolSize);
-                if (currentSize <= _maxPoolSize)
-                {
-                    var connection = await _connectionProvider.GetOrCreateAsync(cancellationToken).ConfigureAwait(false);
-                    return connection.CreateModel();
-                }
-                else
-                {
-                    Interlocked.Decrement(ref _currentPoolSize);
-                    throw;
-                }
             }
         }
 
-        public async ValueTask AddOrCloseChannelAsync(IModel channel)
+        public async ValueTask AddOrCloseChannelAsync(IModel channel, CancellationToken cancellationToken = default)
         {
-            if (channel == null)
+            try
             {
-                Interlocked.Decrement(ref _currentPoolSize);
-                return;
-            }
+                if (channel == null) return;
 
-            // Validate before returning to pool
-            if (IsChannelHealthy(channel) && _currentPoolSize <= _maxPoolSize)
-            {
-                if (!await _channelPool.Writer.WaitToWriteAsync().ConfigureAwait(false) ||
-                    !_channelPool.Writer.TryWrite(channel))
+                try
                 {
-                    // Channel is disposed or closed, dispose the RabbitMQ channel
+                    // Validate before returning to pool
+                    if (IsChannelHealthy(channel))
+                    {
+                        if (!await _channelPool.Writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false) ||
+                            !_channelPool.Writer.TryWrite(channel))
+                        {
+                            // Channel writer is completed or closed, dispose the RabbitMQ channel
+                            DisposeChannel(channel);
+                        }
+                    }
+                    else
+                    {
+                        // Channel is unhealthy, dispose it
+                        DisposeChannel(channel);
+                    }
+                }
+                catch
+                {
                     DisposeChannel(channel);
-                    Interlocked.Decrement(ref _currentPoolSize);
                 }
             }
-            else
+            finally
             {
-                // Channel is unhealthy or pool is full, dispose it
-                DisposeChannel(channel);
-                Interlocked.Decrement(ref _currentPoolSize);
+                // Always release the permit — the channel is no longer checked out,
+                // whether it went back to the pool or was disposed.
+                _poolSizeGate.Release();
             }
         }
 
@@ -145,26 +133,24 @@ namespace SharpMQ.Connections
         {
             if (_isInitialized) return;
 
-            await _poolLocker.WaitAsync(cancellationToken);
+            await _poolLocker.WaitAsync(cancellationToken).ConfigureAwait(false);
 
             try
             {
 
                 if (_isInitialized) return;
 
-                var connection = await _connectionProvider.GetOrCreateAsync();
+                var connection = await _connectionProvider.GetOrCreateAsync(cancellationToken).ConfigureAwait(false);
                 for (int i = 0; i < _minPoolSize; i++)
                 {
                     var channel = connection.CreateModel();
-                    if (_channelPool.Writer.TryWrite(channel))
-                    {
-                        Interlocked.Increment(ref _currentPoolSize);
-                    }
-                    else
+                    if (_enablePublisherConfirms) channel.ConfirmSelect();
+                    if (!_channelPool.Writer.TryWrite(channel))
                     {
                         // Failed to write, dispose the channel
                         DisposeChannel(channel);
                     }
+                    // No permit acquired — channels in the pool are not "checked out"
                 }
                 _isInitialized = true;
             }
@@ -230,6 +216,8 @@ namespace SharpMQ.Connections
                     {
                         DisposeChannel(channel);
                     }
+
+                    _poolSizeGate?.Dispose();
                 }
                 catch (Exception)
                 {

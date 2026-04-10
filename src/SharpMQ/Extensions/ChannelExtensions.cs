@@ -10,10 +10,7 @@ namespace SharpMQ.Extensions
     {
         public static IModel ConfigureConsumerChannel<T>(this IModel channel, ConsumerConfig config)
         {
-            if (config.Queue.UseMessageTypeAsQueueName)
-            {
-                config.Queue.Name = typeof(T).FullName;
-            }
+            var queueName = ResolveQueueName<T>(config);
 
             var args = config.Queue.QueueArgs;
 
@@ -22,31 +19,31 @@ namespace SharpMQ.Extensions
                 var dlargs = new QueueArgConfig[] {
                 new QueueArgConfig(){
                     Key =ConfigConstants.QueueArgKeys.DLExchage,
-                    Value = config.Queue.Name.AsDLExchange()
+                    Value = queueName.AsDLExchange()
                 },
                 new QueueArgConfig()
                 {
                     Key = ConfigConstants.QueueArgKeys.DLExchangeRoutingKey,
-                    Value =  config.Queue.Name
+                    Value =  queueName
                 }};
                 args = config.Queue.QueueArgs == null ? dlargs : config.Queue.QueueArgs.Concat(dlargs).ToArray();
             }
 
-            channel.AddQueue(config.Queue.Name, args);
-            channel.AddExchange(config.Queue.Name.AsDirectExchange(), ConfigConstants.Exchanges.Direct);
-            channel.AddBinding(config.Queue.Name, config.Queue.Name.AsDirectExchange(), config.Queue.Name);
+            channel.AddQueue(queueName, args);
+            channel.AddExchange(queueName.AsDirectExchange(), ConfigConstants.Exchanges.Direct);
+            channel.AddBinding(queueName, queueName.AsDirectExchange(), queueName);
 
             if (!config.DisableDeadLettering)
             {
-                channel.AddExchange(config.Queue.Name.AsDLExchange(), ConfigConstants.Exchanges.Direct);
+                channel.AddExchange(queueName.AsDLExchange(), ConfigConstants.Exchanges.Direct);
 
-                channel.AddQueue(config.Queue.Name.AsDLQ())
-                       .AddBinding(config.Queue.Name.AsDLQ(), config.Queue.Name.AsDLExchange(), config.Queue.Name);
+                channel.AddQueue(queueName.AsDLQ())
+                       .AddBinding(queueName.AsDLQ(), queueName.AsDLExchange(), queueName);
             }
 
             if (config.IsRetryEnabled())
             {
-                channel.ConfigureRetry(config);
+                channel.ConfigureRetry(config, queueName);
             }
 
 
@@ -61,13 +58,13 @@ namespace SharpMQ.Extensions
 
                     if (string.Equals(exchangeItem.Type, ConfigConstants.Exchanges.Fanout, System.StringComparison.InvariantCultureIgnoreCase))
                     {
-                        channel.AddBinding(config.Queue.Name, exchangeItem?.Name, string.Empty);
+                        channel.AddBinding(queueName, exchangeItem?.Name, string.Empty);
                     }
                     else
                     {
                         foreach (var routing in exchangeItem.GetRoutingKeys())
                         {
-                            channel.AddBinding(config.Queue.Name, exchangeItem?.Name, routing);
+                            channel.AddBinding(queueName, exchangeItem?.Name, routing);
                         }
                     }
                 }
@@ -76,25 +73,37 @@ namespace SharpMQ.Extensions
             return channel;
         }
 
-        public static void StartConsume(this IBasicConsumer consumer, IModel channel, ConsumerConfig config, uint prefetchSize, ushort prefetchCount)
+        /// <summary>
+        /// Resolves the effective queue name for a consumer without mutating the config.
+        /// </summary>
+        internal static string ResolveQueueName<T>(ConsumerConfig config)
+        {
+            return config.Queue.UseMessageTypeAsQueueName
+                ? typeof(T).FullName
+                : config.Queue.Name;
+        }
+
+        public static void StartConsume<T>(this IBasicConsumer consumer, IModel channel, ConsumerConfig config, uint prefetchSize, ushort prefetchCount) where T : class
         {
             if (channel == null)
             {
                 throw new RabbitMqException("Channel not configured!");
             }
 
+            var queueName = ResolveQueueName<T>(config);
+
             channel.BasicQos(prefetchSize, prefetchCount, global: false);
 
             if (config.IsPublisherConfirmsEnabled()) channel.ConfirmSelect();
 
-            channel.BasicConsume(config.Queue.Name, autoAck: false, consumer);
+            channel.BasicConsume(queueName, autoAck: false, consumer);
         }
 
-        public static IModel AddExchange(this IModel channel, string exchnage, string exchangeType)
+        public static IModel AddExchange(this IModel channel, string exchange, string exchangeType)
         {
-            if (!string.IsNullOrWhiteSpace(exchnage) && !string.IsNullOrWhiteSpace(exchangeType))
+            if (!string.IsNullOrWhiteSpace(exchange) && !string.IsNullOrWhiteSpace(exchangeType))
             {
-                channel.ExchangeDeclare(exchnage, exchangeType, durable: true);
+                channel.ExchangeDeclare(exchange, exchangeType, durable: true);
             }
 
             return channel;
@@ -131,22 +140,21 @@ namespace SharpMQ.Extensions
             return channel;
         }
 
-        public static IBasicProperties WithPersistens(this IModel channel)
+        public static IBasicProperties WithPersistence(this IModel channel)
         {
             IBasicProperties basicProperties = channel.CreateBasicProperties();
             basicProperties.Persistent = true;
             return basicProperties;
         }
 
-        private static IModel ConfigureRetry(this IModel channel, ConsumerConfig config)
+        private static IModel ConfigureRetry(this IModel channel, ConsumerConfig config, string queueName)
         {
-            var retryTopicExchange = config.Queue.Name.AsRetryTopicExchange();
+            var retryTopicExchange = queueName.AsRetryTopicExchange();
             channel.AddExchange(retryTopicExchange, ConfigConstants.Exchanges.Topic);
 
-            foreach (var ttlMsStr in config.Retry.PerMessageTtlOnRetryMs)
+            foreach (var ttlMs in config.Retry.PerMessageTtlOnRetryMs)
             {
-                var ttlMs = long.Parse(ttlMsStr);
-                var retryQueue = config.Queue.Name.AsRetryQ(ttlMs);
+                var retryQueue = queueName.AsRetryQ(ttlMs);
 
                 channel.AddQueue(retryQueue, new QueueArgConfig[]
                 {
@@ -158,16 +166,16 @@ namespace SharpMQ.Extensions
                     new QueueArgConfig()
                     {
                         Key = ConfigConstants.QueueArgKeys.DLExchage,
-                        Value = config.Queue.Name.AsDirectExchange()
+                        Value = queueName.AsDirectExchange()
                     },
                     new QueueArgConfig()
                     {
                         Key = ConfigConstants.QueueArgKeys.DLExchangeRoutingKey,
-                        Value = config.Queue.Name
+                        Value = queueName
                     }
                 });
 
-                channel.AddBinding(retryQueue, retryTopicExchange, ttlMsStr);
+                channel.AddBinding(retryQueue, retryTopicExchange, ttlMs.ToString());
             }
 
             return channel;

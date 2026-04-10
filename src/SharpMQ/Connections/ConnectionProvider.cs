@@ -180,16 +180,17 @@ namespace SharpMQ.Connections
 
         private static async Task<IConnection> CreateConnectionInternalAsync(IConnectionFactory factory, IEnumerable<AmqpTcpEndpoint> hosts, ILogger logger, int reconnectIntervalInSeconds, int reconnectCount, CancellationToken cancellationToken)
         {
+            var hostList = hosts.ToList();
             int tryCount = 0;
             do
             {
                 try
                 {
-                    return factory.CreateConnection(hosts.ToList());
+                    return factory.CreateConnection(hostList);
                 }
                 catch (BrokerUnreachableException ex)
                 {
-                    logger.LogError(ex, "Error while try to connect one of rabbitmq hosts. reconnectCount: {reconnectCount}, Hosts: {hosts} ", tryCount, string.Join(",", hosts.ToList()));
+                    logger.LogError(ex, "Error while try to connect one of rabbitmq hosts. reconnectCount: {reconnectCount}, Hosts: {hosts} ", tryCount, string.Join(",", hostList));
 
                     tryCount++;
                     await Task.Delay(TimeSpan.FromSeconds(reconnectIntervalInSeconds), cancellationToken).ConfigureAwait(false);
@@ -200,7 +201,7 @@ namespace SharpMQ.Connections
                 }
             }
             while (reconnectCount >= tryCount);
-            throw new RabbitMqException("Error while try to connect one of rabbitmq hosts: " + string.Join(",", hosts.ToList()));
+            throw new RabbitMqException("Error while try to connect one of rabbitmq hosts: " + string.Join(",", hostList));
         }
 
         public void Dispose()
@@ -220,6 +221,47 @@ namespace SharpMQ.Connections
         {
             if (_disposed) return;
 
+            try
+            {
+                if (_connection != null && _connection.IsOpen)
+                {
+                    await Task.Run(() =>
+                    {
+                        _connection.Close();
+                    }).ConfigureAwait(false);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                //if already disposed its ok
+            }
+
+            DisposeCore();
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+
+            if (disposing)
+            {
+                try
+                {
+                    _connection?.Close();
+                }
+                catch (ObjectDisposedException)
+                {
+                    //if already disposed its ok
+                }
+
+                DisposeCore();
+            }
+        }
+
+        private void DisposeCore()
+        {
+            if (_disposed) return;
+
             RaiseConnectionEvent(ConnectionEventType.Disposing, "Connection manager is being disposed");
 
             try
@@ -230,14 +272,6 @@ namespace SharpMQ.Connections
                     _connection.ConnectionBlocked -= OnBlocked;
                     _connection.ConnectionUnblocked -= OnUnblocked;
                     _connection.CallbackException -= OnCallbackException;
-                }
-
-                if (_connection != null && _connection.IsOpen)
-                {
-                    await Task.Run(() =>
-                    {
-                        _connection.Close();
-                    }).ConfigureAwait(false);
                 }
 
                 _connection?.Dispose();
@@ -251,45 +285,6 @@ namespace SharpMQ.Connections
             catch (ObjectDisposedException)
             {
                 //if already disposed its ok
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during async disposal");
-                throw;
-            }
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_disposed) return;
-
-            if (disposing)
-            {
-                RaiseConnectionEvent(ConnectionEventType.Disposing, "Connection manager is being disposed");
-
-                try
-                {
-                    if (_connection != null)
-                    {
-                        _connection.ConnectionShutdown -= OnShutdown;
-                        _connection.ConnectionBlocked -= OnBlocked;
-                        _connection.ConnectionUnblocked -= OnUnblocked;
-                        _connection.CallbackException -= OnCallbackException;
-                    }
-
-                    _connection?.Close();
-                    _connection?.Dispose();
-                    _connectionSemaphore?.Dispose();
-                    _uptimeStopwatch?.Stop();
-
-                    RaiseConnectionEvent(ConnectionEventType.Disposed, "Connection manager disposed");
-                }
-                catch (ObjectDisposedException)
-                {
-                    //if already disposed its ok
-                }
-
-                _disposed = true;
             }
         }
     }

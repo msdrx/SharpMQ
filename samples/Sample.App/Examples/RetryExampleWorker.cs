@@ -12,18 +12,22 @@ namespace Sample.App;
 public class RetryExampleWorker : BackgroundService
 {
     private readonly ILogger<RetryExampleWorker> _logger;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _consumers;
+    private IConsumerGroup<TestMessage>? _consumers;
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
 
-    public RetryExampleWorker(ILogger<RetryExampleWorker> logger, IConfiguration configuration, IServiceProvider serviceProvider)
+    private readonly IProducer _producer;
+
+
+    public RetryExampleWorker(ILogger<RetryExampleWorker> logger, IConfiguration configuration, IServiceProvider serviceProvider, IProducer producer)
     {
         _logger = logger;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
+        _producer = producer;
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var serverConfig = _configuration.GetRequiredSection("ServerTest").Get<RabbitMqServerConfig>();
         var consumerConfig = _configuration.GetRequiredSection("RetryExampleConsumer").Get<ConsumerConfig>();
@@ -35,7 +39,7 @@ public class RetryExampleWorker : BackgroundService
             new CustomJsonSerializer(),
             consumerClientProvidedName: "RetryExampleConsumer");
 
-        _consumers.SubscribeAsync(
+        await _consumers.SubscribeAsync(
             async (message, sp, msgContext) =>
             {
                 // Simulate message processing
@@ -65,24 +69,30 @@ public class RetryExampleWorker : BackgroundService
                 // - Retried with increasing delays (5s -> 15s -> 1m) if retries remain
                 // - Sent to DLQ if max retries reached
             },
-            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault));
+            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault),
+            cancellationToken: stoppingToken);
 
         _logger.LogInformation("RetryExampleWorker started. Waiting for messages to demonstrate retry with variable TTL...");
         _logger.LogInformation("Retry configuration: 5s -> 15s -> 1m");
         _logger.LogInformation("Queue names created: retry.example.RetryQ.5s, retry.example.RetryQ.15s, retry.example.RetryQ.1m");
 
-        return Task.CompletedTask;
+        await Task.Delay(TimeSpan.FromMicroseconds(100));
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await _producer.PublishAsync("retry.example.direct", "retry.example", new TestMessage()
+            {
+                Amount = Random.Shared.Next(0, 10000),
+                Account = "XXX"
+            });
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
     }
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_consumers != null)
-        {
-            foreach (var consumer in _consumers)
-            {
-                consumer?.Dispose();
-            }
-        }
+        _consumers?.Dispose();
         return base.StopAsync(cancellationToken);
     }
 }

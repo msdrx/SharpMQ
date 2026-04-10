@@ -1,22 +1,51 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": [],
-    "tasks": [
+    "configurations": [
         {
-            "label": "docker-build-debug",
-            "type": "shell",
-            "command": "docker-compose up -d --build"
+            "name": "Docker Compose: Debug",
+            "type": "coreclr",
+            "request": "attach",
+            "processId": "1",
+            "justMyCode": true,
+            "preLaunchTask": "docker-compose: debug",
+            "postDebugTask": "docker-compose: stop",
+            "sourceFileMap": {
+                "/src": "${workspaceFolder}"
+            },
+            "pipeTransport": {
+                "pipeProgram": "docker",
+                "pipeArgs": [
+                    "exec",
+                    "-i",
+                    "sampleapp"
+                ],
+                "debuggerPath": "/remote_debugger/vsdbg",
+                "pipeCwd": "${workspaceFolder}",
+                "quoteArgs": false
+            }
         },
         {
-            "label": "docker-run-debug",
-            "type": "shell",
-            "command": "docker exec -it myapp-debug dotnet run --configuration Debug",
-            "dependsOn": [
-                "docker-build-debug"
-            ]
+            "name": "Docker Compose: Build & Debug",
+            "type": "coreclr",
+            "request": "attach",
+            "processId": "1",
+            "justMyCode": true,
+            "preLaunchTask": "docker-compose: build & debug",
+            "postDebugTask": "docker-compose: stop",
+            "sourceFileMap": {
+                "/src": "${workspaceFolder}"
+            },
+            "pipeTransport": {
+                "pipeProgram": "docker",
+                "pipeArgs": [
+                    "exec",
+                    "-i",
+                    "sampleapp"
+                ],
+                "debuggerPath": "/remote_debugger/vsdbg",
+                "pipeCwd": "${workspaceFolder}",
+                "quoteArgs": false
+            }
         }
     ]
 }

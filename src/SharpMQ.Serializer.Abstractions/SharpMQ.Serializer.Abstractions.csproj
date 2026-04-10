@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netstandard2.0;netcoreapp3.1;net6;net8</TargetFrameworks>
+		<TargetFrameworks>net10.0;net8;net6;netstandard2.0</TargetFrameworks>
 		<Title>SharpMQ.Serializer.Abstractions</Title>
 		<Company>Mikheil Sadradze</Company>
 		<Description>SharpMQ Serializer Abstractions</Description>
 		<PackageTags>RabbitMQ .NET C# csharp rabbit message broker</PackageTags>
 		<PackageId>SharpMQ.Serializer.Abstractions</PackageId>
-		<Version>1.1.0</Version>
+		<Version>1.2.0</Version>
 		<Authors>Mikheil Sadradze</Authors>
 		<RepositoryUrl>https://github.com/msdrx/SharpMQ</RepositoryUrl>
 		<PackageProjectUrl>https://github.com/msdrx/SharpMQ</PackageProjectUrl>
@@ -28,11 +28,11 @@
 		<NoWarn>1701;1702;1591</NoWarn>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|netcoreapp3.1|AnyCPU'">
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8|AnyCPU'">
 		<NoWarn>1701;1702;1591</NoWarn>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|netcoreapp3.1|AnyCPU'">
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8|AnyCPU'">
 		<NoWarn>1701;1702;1591</NoWarn>
 	</PropertyGroup>
 
@@ -44,11 +44,11 @@
 		<NoWarn>1701;1702;1591</NoWarn>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8|AnyCPU'">
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net10.0|AnyCPU'">
 		<NoWarn>1701;1702;1591</NoWarn>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8|AnyCPU'">
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net10.0|AnyCPU'">
 		<NoWarn>1701;1702;1591</NoWarn>
 	</PropertyGroup>
 

@@ -1,0 +1,81 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/SharpMQ.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "type": "docker-build",
+            "label": "docker-build: debug",
+            "dependsOn": [
+                "build"
+            ],
+            "dockerBuild": {
+                "tag": "sharpmq:dev",
+                "target": "base",
+                "dockerfile": "${workspaceFolder}/samples/Sample.App/Dockerfile",
+                "context": "${workspaceFolder}",
+                "pull": true
+            },
+            "netCore": {
+                "appProject": "${workspaceFolder}/samples/Sample.App/Sample.App.csproj"
+            }
+        },
+        {
+            "type": "docker-build",
+            "label": "docker-build: release",
+            "dependsOn": [
+                "build"
+            ],
+            "dockerBuild": {
+                "tag": "sharpmq:latest",
+                "dockerfile": "${workspaceFolder}/samples/Sample.App/Dockerfile",
+                "context": "${workspaceFolder}",
+                "platform": {
+                    "os": "linux",
+                    "architecture": "amd64"
+                },
+                "pull": true
+            },
+            "netCore": {
+                "appProject": "${workspaceFolder}/samples/Sample.App/Sample.App.csproj"
+            }
+        },
+        {
+            "label": "docker-compose: debug",
+            "type": "shell",
+            "command": "docker compose -f compose.yaml -f compose.debug.yaml up -d",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "docker-compose: build & debug",
+            "type": "shell",
+            "command": "docker compose -f compose.yaml -f compose.debug.yaml up -d --build sample.app",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "docker-compose: stop",
+            "type": "shell",
+            "command": "docker compose -f compose.yaml -f compose.debug.yaml stop",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
