@@ -15,7 +15,7 @@ namespace SharpMQ
 {
     public static class ConsumerFactory
     {
-        public static IReadOnlyCollection<IConsumer<T>> CreateConsumers<T>(RabbitMqServerConfig serverConfig,
+        public static IConsumerGroup<T> CreateConsumers<T>(RabbitMqServerConfig serverConfig,
                                                                            ConsumerConfig consumerConfig,
                                                                            IServiceProvider serviceProvider,
                                                                            RabbitSerializer serializer,
@@ -54,11 +54,13 @@ namespace SharpMQ
                                                                    $"{consumerClientProvidedName}:{i}");
                 }
 
+                // When each consumer has its own connection, it owns (and disposes) it.
+                // When sharing, the ConsumerGroup owns the connection.
                 var ownsConnection = !singleConnectionPerConsumerGroup;
                 consumers.Add(new Consumer<T>(connectionProvider, consumerConfig, serviceProvider, consumerLogger, serializer, defaultSerializerOptions, ownsConnection));
             }
 
-            return consumers.AsReadOnly();
+            return new ConsumerGroup<T>(consumers, singleConnectionPerConsumerGroup ? connectionProvider : null);
 
         }
 

@@ -14,7 +14,7 @@ public class BasicQueueExample : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<BasicQueueExample> _logger;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _consumers;
+    private IConsumerGroup<TestMessage>? _consumers;
 
     public BasicQueueExample(
         IProducer producer,
@@ -75,13 +75,7 @@ public class BasicQueueExample : BackgroundService
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_consumers != null)
-        {
-            foreach (var consumer in _consumers)
-            {
-                consumer?.Dispose();
-            }
-        }
+        _consumers?.Dispose();
         return base.StopAsync(cancellationToken);
     }
 }

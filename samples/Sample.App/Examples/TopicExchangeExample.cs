@@ -18,9 +18,9 @@ public class TopicExchangeExample : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<TopicExchangeExample> _logger;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _usaOrderConsumers;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _europeOrderConsumers;
-    private IReadOnlyCollection<IConsumer<TestMessage>>? _logConsumers;
+    private IConsumerGroup<TestMessage>? _usaOrderConsumers;
+    private IConsumerGroup<TestMessage>? _europeOrderConsumers;
+    private IConsumerGroup<TestMessage>? _logConsumers;
 
     public TopicExchangeExample(
         IProducer producer,
@@ -147,20 +147,9 @@ public class TopicExchangeExample : BackgroundService
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        void DisposeConsumers(IReadOnlyCollection<IConsumer<TestMessage>>? consumers)
-        {
-            if (consumers != null)
-            {
-                foreach (var consumer in consumers)
-                {
-                    consumer?.Dispose();
-                }
-            }
-        }
-
-        DisposeConsumers(_usaOrderConsumers);
-        DisposeConsumers(_europeOrderConsumers);
-        DisposeConsumers(_logConsumers);
+        _usaOrderConsumers?.Dispose();
+        _europeOrderConsumers?.Dispose();
+        _logConsumers?.Dispose();
 
         return base.StopAsync(cancellationToken);
     }
