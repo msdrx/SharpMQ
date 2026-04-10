@@ -13,7 +13,7 @@ namespace SharpMQ.Extensions
             {
                 return (int?)properties.Headers?[ConfigConstants.BasicPropertyHeaders.XRetries] ?? max_retry_count;
             }
-            catch
+            catch (KeyNotFoundException)
             {
                 return max_retry_count;
             }

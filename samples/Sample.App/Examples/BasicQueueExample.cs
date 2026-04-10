@@ -41,7 +41,7 @@ public class BasicQueueExample : BackgroundService
             new CustomJsonSerializer(),
             consumerClientProvidedName: "BasicQueueConsumer");
 
-        _consumers.SubscribeAsync(
+        await _consumers.SubscribeAsync(
             async (message, sp, msgContext) =>
             {
                 await Task.Delay(100);
@@ -52,7 +52,8 @@ public class BasicQueueExample : BackgroundService
                 await Task.Delay(100);
                 _logger.LogError("[BasicQueue] Error: {Message}", message);
             },
-            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault));
+            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault),
+            cancellationToken: stoppingToken);
 
         // Publish messages
         await Task.Delay(3000, stoppingToken);

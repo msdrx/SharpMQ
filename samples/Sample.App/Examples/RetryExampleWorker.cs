@@ -39,7 +39,7 @@ public class RetryExampleWorker : BackgroundService
             new CustomJsonSerializer(),
             consumerClientProvidedName: "RetryExampleConsumer");
 
-        _consumers.SubscribeAsync(
+        await _consumers.SubscribeAsync(
             async (message, sp, msgContext) =>
             {
                 // Simulate message processing
@@ -69,7 +69,8 @@ public class RetryExampleWorker : BackgroundService
                 // - Retried with increasing delays (5s -> 15s -> 1m) if retries remain
                 // - Sent to DLQ if max retries reached
             },
-            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault));
+            serializerOptions: new CustomJsonSerializerOptions(JsonConstants.ConsumerDefault),
+            cancellationToken: stoppingToken);
 
         _logger.LogInformation("RetryExampleWorker started. Waiting for messages to demonstrate retry with variable TTL...");
         _logger.LogInformation("Retry configuration: 5s -> 15s -> 1m");

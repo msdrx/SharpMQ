@@ -15,12 +15,20 @@ namespace SharpMQ.Configs
 
         public void Validate()
         {
-            if (ChannelPool == null
-                || ChannelPool.MinPoolSize <= 0
-                || ChannelPool.MaxPoolSize <= 0
-                || ChannelPool.MinPoolSize >= ChannelPool.MaxPoolSize
-                || ChannelPool.WaitTimeoutMs <= 0)
-                throw new RabbitMqConfigValidationException("Producer ChannelPool config is invalid");
+            if (ChannelPool == null)
+                throw new RabbitMqConfigValidationException("Producer ChannelPool is required");
+
+            if (ChannelPool.MinPoolSize <= 0)
+                throw new RabbitMqConfigValidationException("Producer ChannelPool MinPoolSize must be greater than 0");
+
+            if (ChannelPool.MaxPoolSize <= 0)
+                throw new RabbitMqConfigValidationException("Producer ChannelPool MaxPoolSize must be greater than 0");
+
+            if (ChannelPool.MinPoolSize >= ChannelPool.MaxPoolSize)
+                throw new RabbitMqConfigValidationException("Producer ChannelPool MinPoolSize must be less than MaxPoolSize");
+
+            if (ChannelPool.WaitTimeoutMs <= 0)
+                throw new RabbitMqConfigValidationException("Producer ChannelPool WaitTimeoutMs must be greater than 0");
 
             PublisherConfirms?.Validate();
         }

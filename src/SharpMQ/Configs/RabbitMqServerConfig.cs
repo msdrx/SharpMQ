@@ -14,6 +14,8 @@ namespace SharpMQ.Configs
         public string VirtualHost { get; set; }
         public string[] Hosts { get; set; }
 
+        public int Port { get; set; } = 5672;
+
         public string ClientProvidedName { get; set; }
 
         public int? ReconnectCount { get; set; }
@@ -24,7 +26,7 @@ namespace SharpMQ.Configs
         {
             foreach (var host in Hosts)
             {
-                yield return new AmqpTcpEndpoint(host, 5672);
+                yield return new AmqpTcpEndpoint(host, Port);
             }
         }
 
@@ -40,6 +42,8 @@ namespace SharpMQ.Configs
             if (ReconnectIntervalInSeconds.HasValue && ReconnectIntervalInSeconds <= 0) throw new RabbitMqConfigValidationException("RabbitMq Server ReconnectIntervalInSeconds is <= 0");
 
             if (NetworkRecoveryIntervalInSeconds.HasValue && NetworkRecoveryIntervalInSeconds <= 0) throw new RabbitMqConfigValidationException("RabbitMq Server NetworkRecoveryIntervalInSeconds is <= 0");
+
+            if (Port < 1 || Port > 65535) throw new RabbitMqConfigValidationException("RabbitMq Server Port must be between 1 and 65535");
 
             if (Hosts == null || !Hosts.Any() || Hosts.Any(x => string.IsNullOrWhiteSpace(x)))
             {

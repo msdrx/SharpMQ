@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Threading.Tasks;
 using SharpMQ.Abstractions;
@@ -20,6 +21,7 @@ namespace SharpMQ.Consumers
         private AsyncEventingBasicConsumer _asyncEventingBasicConsumer;
         private readonly SemaphoreSlim _channelSemaphore = new SemaphoreSlim(1, 1);
         private readonly object _lockConsumer = new object();
+        private readonly string _resolvedQueueName;
         private bool _isInitialized;
 
         public Consumer(IConnectionProvider connectionProvider,
@@ -27,9 +29,11 @@ namespace SharpMQ.Consumers
                         IServiceProvider serviceProvider,
                         ILogger logger,
                         RabbitSerializer serializer,
-                        RabbitSerializerOptions defaultSerializerOptions = null)
-                        : base(connectionProvider, config, serviceProvider, logger, serializer, defaultSerializerOptions)
+                        RabbitSerializerOptions defaultSerializerOptions = null,
+                        bool ownsConnection = true)
+                        : base(connectionProvider, config, serviceProvider, logger, serializer, defaultSerializerOptions, ownsConnection)
         {
+            _resolvedQueueName = ChannelExtensions.ResolveQueueName<T>(config);
             // Lazy initialization - channel and consumer will be created on first use
             _isInitialized = false;
         }
@@ -37,14 +41,15 @@ namespace SharpMQ.Consumers
         public async Task SubscribeAsync(
             Func<T, IServiceProvider, MessageContext, Task> onDequeue,
             Func<T, IServiceProvider, MessageContext, Exception, Task> onException,
-            RabbitSerializerOptions serializerOptions = null)
+            RabbitSerializerOptions serializerOptions = null,
+            CancellationToken cancellationToken = default)
         {
             if (!_connectionProvider.IsDispatchConsumersAsyncEnabled)
             {
                 throw new ConsumerException("DispatchConsumersAsync is disabled when consumer built");
             }
 
-            await EnsureInitialized();
+            await EnsureInitialized(cancellationToken);
 
             _asyncEventingBasicConsumer.Registered += Consumer_Registered;
             _asyncEventingBasicConsumer.Unregistered += Consumer_Unregistered;
@@ -54,6 +59,7 @@ namespace SharpMQ.Consumers
 
             _asyncEventingBasicConsumer.Received += async (s, ea) =>
             {
+                var ch = _channel;
                 bool isLastTry = true;
                 MessageContext msgContext = default;
                 T message = default;
@@ -77,20 +83,20 @@ namespace SharpMQ.Consumers
                         }
                     }
 
-                    _channel.BasicAck(ea.DeliveryTag, multiple: false);
+                    ch.BasicAck(ea.DeliveryTag, multiple: false);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "RabbitMQ Consumer error: isLastTryOnError={isLastTryOnError} {tag}", isLastTry, msgContext.BasicDeliverEventArgs.ConsumerTag);
-                    await OnException(msgContext, ea, message, ex, onException);
+                    await OnException(ch, msgContext, ea, message, ex, onException);
                 }
 
             };
 
-            _asyncEventingBasicConsumer.StartConsume(_channel, _config, _prefetchSize, _prefetchCount);
+            _asyncEventingBasicConsumer.StartConsume<T>(_channel, _config, _prefetchSize, _prefetchCount);
         }
 
-        public async Task<bool> CreateNewChannelAndStartConsume(bool rethrowError = false)
+        public async Task<bool> CreateNewChannelAndStartConsume(bool rethrowError = false, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -102,12 +108,12 @@ namespace SharpMQ.Consumers
 
                 if (_asyncEventingBasicConsumer is null)
                 {
-                    _logger.LogError("CreateNewChannelAndStartConsume: asyncEventingBasicConsumer არის null");
+                    _logger.LogError("CreateNewChannelAndStartConsume: asyncEventingBasicConsumer is null");
                     return false;
                 }
                 else
                 {
-                    _channelSemaphore.Wait();
+                    await _channelSemaphore.WaitAsync(cancellationToken);
                     try
                     {
                         if (!(_channel == null || _channel.IsClosed))
@@ -148,7 +154,7 @@ namespace SharpMQ.Consumers
             {
                 if (GetConsumerTags().Any())
                 {
-                    _logger.LogWarning("StartConsume: ConsumerTags is empty");
+                    _logger.LogWarning("StartConsume: Consumer is already active, tags already exist");
                     return false;
                 }
 
@@ -162,7 +168,7 @@ namespace SharpMQ.Consumers
                 {
                     if (GetConsumerTags().Any())
                     {
-                        _logger.LogWarning("StartConsume: ConsumerTags is empty");
+                        _logger.LogWarning("StartConsume: Consumer is already active, tags already exist");
                         return false;
                     }
 
@@ -172,7 +178,7 @@ namespace SharpMQ.Consumers
                         return false;
                     }
 
-                    _asyncEventingBasicConsumer.StartConsume(_channel, _config, _prefetchSize, _prefetchCount);
+                    _asyncEventingBasicConsumer.StartConsume<T>(_channel, _config, _prefetchSize, _prefetchCount);
                 }
                 return true;
             }
@@ -215,6 +221,7 @@ namespace SharpMQ.Consumers
 
 
         private async Task OnException(
+            IModel channel,
             MessageContext msgContext,
             BasicDeliverEventArgs basicDeliverEventArgs,
             T message,
@@ -235,51 +242,52 @@ namespace SharpMQ.Consumers
                 _logger.LogError(e, "OnException action errored");
             }
 
-            RetryOrReject(basicDeliverEventArgs);
+            RetryOrReject(channel, basicDeliverEventArgs);
         }
 
 
-        private void RetryOrReject(BasicDeliverEventArgs ea)
+        private void RetryOrReject(IModel channel, BasicDeliverEventArgs ea)
         {
             if (IsMaxRetryReached(ea.BasicProperties, out int retryCount) || !_config.IsRetryEnabled())
             {
                 if (_config.DisableDeadLettering)
                 {
-                    _channel.BasicAck(ea.DeliveryTag, false);
+                    channel.BasicAck(ea.DeliveryTag, false);
                 }
                 else
                 {
-                    _channel.BasicNack(ea.DeliveryTag, multiple: false, requeue: false);
+                    channel.BasicNack(ea.DeliveryTag, multiple: false, requeue: false);
                 }
             }
             else
             {
                 var ttlMs = _config.Retry.PerMessageTtlOnRetryMs[retryCount];
+                var ttlMsStr = ttlMs.ToString();
 
-                ea.BasicProperties.Expiration = ttlMs;
+                ea.BasicProperties.Expiration = ttlMsStr;
                 ea.BasicProperties.WithRetryCount(++retryCount);
 
-                _channel.BasicPublish(_config.Queue.Name.AsRetryTopicExchange(),
-                                      ttlMs,
+                channel.BasicPublish(_resolvedQueueName.AsRetryTopicExchange(),
+                                      ttlMsStr,
                                       mandatory: true,
                                       ea.BasicProperties,
                                       ea.Body);
 
                 if (_config.IsPublisherConfirmsEnabled())
                 {
-                    _channel.WaitForConfirmsOrDie(TimeSpan.FromMilliseconds(_config.PublisherConfirms.WaitConfirmsMilliseconds));
+                    channel.WaitForConfirmsOrDie(TimeSpan.FromMilliseconds(_config.PublisherConfirms.WaitConfirmsMilliseconds));
                 }
 
-                _channel.BasicAck(ea.DeliveryTag, false);
+                channel.BasicAck(ea.DeliveryTag, false);
             }
         }
 
 
-        private async Task EnsureInitialized()
+        private async Task EnsureInitialized(CancellationToken cancellationToken = default)
         {
             if (_isInitialized) return;
 
-            _channelSemaphore.Wait();
+            await _channelSemaphore.WaitAsync(cancellationToken);
             try
             {
                 if (_isInitialized) return;

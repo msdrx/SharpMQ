@@ -22,24 +22,27 @@ namespace SharpMQ.Consumers
 
         protected readonly RabbitSerializer _serializer;
         protected readonly RabbitSerializerOptions _defaultSerializerOptions;
+        private readonly bool _ownsConnection;
 
         protected BaseConsumer(IConnectionProvider connectionProvider,
                                ConsumerConfig config,
                                IServiceProvider serviceProvider,
                                ILogger logger,
                                RabbitSerializer serializer,
-                               RabbitSerializerOptions defaultSerializerOptions)
+                               RabbitSerializerOptions defaultSerializerOptions,
+                               bool ownsConnection)
         {
             _config = config;
 
             _logger = logger;
             _prefetchSize = _config.PrefetchSize ?? ConfigConstants.Default.PREFETCH_SIZE;
-            _prefetchCount = _config.PrefechCount ?? ConfigConstants.Default.PREFETCH_COUNT;
+            _prefetchCount = _config.PrefetchCount ?? ConfigConstants.Default.PREFETCH_COUNT;
 
             _connectionProvider = connectionProvider;
             _serviceProvider = serviceProvider;
             _serializer = serializer;
             _defaultSerializerOptions = defaultSerializerOptions;
+            _ownsConnection = ownsConnection;
         }
         protected bool IsMaxRetryReached(IBasicProperties basicProperties, out int count)
         {
@@ -101,13 +104,16 @@ namespace SharpMQ.Consumers
                 }
             }
 
-            try
+            if (_ownsConnection)
             {
-                _connectionProvider?.Dispose();
-            }
-            catch (ObjectDisposedException)
-            {
-                //if already disposed its ok
+                try
+                {
+                    _connectionProvider?.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    //if already disposed its ok
+                }
             }
 
         }

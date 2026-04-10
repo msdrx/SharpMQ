@@ -8,6 +8,6 @@ namespace SharpMQ.Connections
     internal interface IChannelPool : IDisposable
     {
         Task<IModel> GetChannelAsync(CancellationToken cancellationToken = default);
-        ValueTask AddOrCloseChannelAsync(IModel channel);
+        ValueTask AddOrCloseChannelAsync(IModel channel, CancellationToken cancellationToken = default);
     }
 }

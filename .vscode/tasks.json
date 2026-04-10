@@ -62,7 +62,7 @@
         {
             "label": "docker-compose: build & debug",
             "type": "shell",
-            "command": "docker compose -f compose.yaml -f compose.debug.yaml up -d --build",
+            "command": "docker compose -f compose.yaml -f compose.debug.yaml up -d --build sample.app",
             "options": {
                 "cwd": "${workspaceFolder}"
             },

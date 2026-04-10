@@ -9,7 +9,7 @@ using SharpMQ.Configs;
 
 namespace SharpMQ.Extensions
 {
-    internal static class Extentions
+    internal static class Extensions
     {
         public static Dictionary<string, object> GetQueueArgs(this QueueArgConfig[] args)
         {

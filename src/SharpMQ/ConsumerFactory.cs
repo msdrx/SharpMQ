@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -53,22 +54,26 @@ namespace SharpMQ
                                                                    $"{consumerClientProvidedName}:{i}");
                 }
 
-                consumers.Add(new Consumer<T>(connectionProvider, consumerConfig, serviceProvider, consumerLogger, serializer, defaultSerializerOptions));
+                var ownsConnection = !singleConnectionPerConsumerGroup;
+                consumers.Add(new Consumer<T>(connectionProvider, consumerConfig, serviceProvider, consumerLogger, serializer, defaultSerializerOptions, ownsConnection));
             }
 
             return consumers.AsReadOnly();
 
         }
 
-        public static void SubscribeAsync<T>(this IEnumerable<IConsumer<T>> consumers,
-                                             Func<T, IServiceProvider, MessageContext, Task> onDequeue,
-                                             Func<T, IServiceProvider, MessageContext, Exception, Task> onException = null,
-                                             RabbitSerializerOptions serializerOptions = null) where T : class
+        public static async Task SubscribeAsync<T>(this IEnumerable<IConsumer<T>> consumers,
+                                                    Func<T, IServiceProvider, MessageContext, Task> onDequeue,
+                                                    Func<T, IServiceProvider, MessageContext, Exception, Task> onException = null,
+                                                    RabbitSerializerOptions serializerOptions = null,
+                                                    CancellationToken cancellationToken = default) where T : class
         {
+            var tasks = new List<Task>();
             foreach (IConsumer<T> consumer in consumers)
             {
-                consumer.SubscribeAsync(onDequeue, onException, serializerOptions);
+                tasks.Add(consumer.SubscribeAsync(onDequeue, onException, serializerOptions, cancellationToken));
             }
+            await Task.WhenAll(tasks).ConfigureAwait(false);
         }
     }
 }

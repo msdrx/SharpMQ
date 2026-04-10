@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -9,12 +11,17 @@ using SharpMQ.Connections;
 using SharpMQ.Extensions;
 using SharpMQ.Serializer.Abstractions;
 using RabbitMQ.Client;
-using System.Collections.Generic;
 
 namespace SharpMQ.Producers
 {
     internal class Producer : IProducer
     {
+        /// <summary>
+        /// Minimum allowed expiration value in milliseconds. Values between 1 and this threshold are rejected.
+        /// A value of 0 means no expiration.
+        /// </summary>
+        internal const long MinExpirationMs = 100;
+
         private readonly IChannelPool _channelPool;
         private readonly ProducerConfig _config;
         private readonly ILogger<Producer> _logger;
@@ -46,16 +53,18 @@ namespace SharpMQ.Producers
             RabbitSerializerOptions serializerOptions = null,
             CancellationToken cancellationToken = default)
         {
+            if (expirationMs >= 1 && expirationMs < MinExpirationMs)
+                throw new ArgumentOutOfRangeException(nameof(expirationMs), expirationMs, $"Expiration must be 0 (no expiration) or at least {MinExpirationMs} ms.");
+
             IModel channel = default;
             try
             {
                 channel = await _channelPool.GetChannelAsync(cancellationToken).ConfigureAwait(false);
 
                 var enabled = _config.IsPublisherConfirmsEnabled();
-                if (enabled) channel.ConfirmSelect();
 
-                var props = channel.WithPersistens().WithPriority(priority);
-                if (expirationMs > 100) props.Expiration = expirationMs.ToString();
+                var props = channel.WithPersistence().WithPriority(priority);
+                if (expirationMs >= MinExpirationMs) props.Expiration = expirationMs.ToString();
 
                 channel.BasicPublish(exchange, routingKey, mandatory: true, props, message.ToByteArray(_serializer, serializerOptions ?? _defaultSerializerOptions));
 
@@ -63,12 +72,12 @@ namespace SharpMQ.Producers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Producer Error");
+                _logger.LogError(ex, "Producer Error publishing {MessageType} to exchange={Exchange} routingKey={RoutingKey}", typeof(T).Name, exchange, routingKey);
                 throw;
             }
             finally
             {
-                await _channelPool.AddOrCloseChannelAsync(channel).ConfigureAwait(false);
+                await _channelPool.AddOrCloseChannelAsync(channel, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -81,15 +90,17 @@ namespace SharpMQ.Producers
             int batchSize = 20,
             CancellationToken cancellationToken = default)
         {
+            if (expirationMs >= 1 && expirationMs < MinExpirationMs)
+                throw new ArgumentOutOfRangeException(nameof(expirationMs), expirationMs, $"Expiration must be 0 (no expiration) or at least {MinExpirationMs} ms.");
+
             IModel channel = default;
             try
             {
                 channel = await _channelPool.GetChannelAsync(cancellationToken).ConfigureAwait(false);
                 var enabled = _config.IsPublisherConfirmsEnabled();
-                if (enabled) channel.ConfirmSelect();
 
-                var props = channel.WithPersistens().WithPriority(priority);
-                if (expirationMs > 100) props.Expiration = expirationMs.ToString();
+                var props = channel.WithPersistence().WithPriority(priority);
+                if (expirationMs >= MinExpirationMs) props.Expiration = expirationMs.ToString();
 
                 foreach (var batch in messages.Chunk(batchSize))
                 {
@@ -108,12 +119,12 @@ namespace SharpMQ.Producers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Producer Error while batch publish");
+                _logger.LogError(ex, "Producer Error publishing {MessageType} batch to exchange={Exchange} routingKey={RoutingKey}", typeof(T).Name, exchange, routingKey);
                 throw;
             }
             finally
             {
-                await _channelPool.AddOrCloseChannelAsync(channel).ConfigureAwait(false);
+                await _channelPool.AddOrCloseChannelAsync(channel, cancellationToken).ConfigureAwait(false);
             }
         }
 
