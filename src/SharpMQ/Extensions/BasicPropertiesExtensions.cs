@@ -9,7 +9,7 @@ namespace SharpMQ.Extensions
     {
         public static int GetRetryCount(this IBasicProperties properties, int max_retry_count)
         {
-            if (properties?.Headers is not null
+            if (properties?.Headers != null
                 && properties.Headers.TryGetValue(ConfigConstants.BasicPropertyHeaders.XRetries, out var retryCountObj)
                 && retryCountObj is int retryValue)
             {
