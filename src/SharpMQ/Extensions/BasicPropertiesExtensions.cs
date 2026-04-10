@@ -9,14 +9,14 @@ namespace SharpMQ.Extensions
     {
         public static int GetRetryCount(this IBasicProperties properties, int max_retry_count)
         {
-            try
+            if (properties?.Headers is not null
+                && properties.Headers.TryGetValue(ConfigConstants.BasicPropertyHeaders.XRetries, out var retryCountObj)
+                && retryCountObj is int retryValue)
             {
-                return (int?)properties.Headers?[ConfigConstants.BasicPropertyHeaders.XRetries] ?? max_retry_count;
+                return Math.Max(0, retryValue);
             }
-            catch (KeyNotFoundException)
-            {
-                return max_retry_count;
-            }
+
+            return 0;
         }
 
         public static void WithRetryCount(this IBasicProperties properties, int retryCount)

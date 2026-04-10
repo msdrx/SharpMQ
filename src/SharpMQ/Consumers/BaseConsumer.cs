@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using SharpMQ.Configs;
 using SharpMQ.Connections;
 using SharpMQ.Serializer.Abstractions;
+using SharpMQ.Extensions;
 
 namespace SharpMQ.Consumers
 {
@@ -46,10 +47,8 @@ namespace SharpMQ.Consumers
         }
         protected bool IsMaxRetryReached(IBasicProperties basicProperties, out int count)
         {
-            object retryCountObj = null;
-            basicProperties.Headers?.TryGetValue(ConfigConstants.BasicPropertyHeaders.XRetries, out retryCountObj);
+            count = basicProperties.GetRetryCount(_config.Retry.PerMessageTtlOnRetryMs.Length);
 
-            count = retryCountObj == null ? 0 : (int)retryCountObj;
             return count >= _config.Retry.PerMessageTtlOnRetryMs.Length;
         }
 

@@ -14,22 +14,24 @@ namespace SharpMQ.Unit.Test.Extensions
         #region GetRetryCount: missing header, valid header, corrupt header
 
         [Fact]
-        public void GetRetryCount_Should_ReturnMaxRetryCount_When_HeaderIsMissing()
+        public void GetRetryCount_Should_ReturnZero_When_HeaderIsMissing()
         {
             // Arrange
             var props = new Mock<IBasicProperties>();
             props.SetupGet(p => p.Headers).Returns(new Dictionary<string, object>());
+
             const int maxRetryCount = 5;
+            const int expected = 0;
 
             // Act
             var result = props.Object.GetRetryCount(maxRetryCount);
 
-            // Assert — missing header should return the max retry count (default)
-            result.Should().Be(maxRetryCount);
+            // Assert — missing header should return the 0 retry count (default)
+            result.Should().Be(expected);
         }
 
         [Fact]
-        public void GetRetryCount_Should_ReturnMaxRetryCount_When_HeadersIsNull()
+        public void GetRetryCount_Should_ReturnZero_When_HeadersIsNull()
         {
             // Arrange
             var props = new Mock<IBasicProperties>();
@@ -40,7 +42,8 @@ namespace SharpMQ.Unit.Test.Extensions
             var result = props.Object.GetRetryCount(maxRetryCount);
 
             // Assert
-            result.Should().Be(maxRetryCount);
+            const int expected = 0;
+            result.Should().Be(expected);
         }
 
         [Fact]
@@ -63,7 +66,7 @@ namespace SharpMQ.Unit.Test.Extensions
         }
 
         [Fact]
-        public void GetRetryCount_Should_Throw_When_HeaderIsCorruptNonInteger()
+        public void GetRetryCount_Should_ReturnZero_When_HeaderIsCorruptNonInteger()
         {
             // Arrange — a corrupt header value that cannot be cast to int
             var headers = new Dictionary<string, object>
@@ -74,12 +77,12 @@ namespace SharpMQ.Unit.Test.Extensions
             props.SetupGet(p => p.Headers).Returns(headers);
             const int maxRetryCount = 5;
 
-            // Act — GetRetryCount now only catches KeyNotFoundException,
-            // so an InvalidCastException should propagate.
-            var act = () => props.Object.GetRetryCount(maxRetryCount);
+            //act
+            var result = props.Object.GetRetryCount(maxRetryCount);
 
             // Assert
-            act.Should().Throw<InvalidCastException>();
+            const int expected = 0;
+            result.Should().Be(expected);
         }
 
         #endregion
