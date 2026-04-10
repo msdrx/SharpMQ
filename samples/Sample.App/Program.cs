@@ -13,12 +13,12 @@ var producerConfig = configuration.GetRequiredSection("ProducerTest").Get<Produc
 
 // Register producer
 builder.Services
-    .AddProducer("topic-producer", producerConfig, serverConfig, new CustomJsonSerializer())
+    .AddProducer("sample-producer", producerConfig, serverConfig, new CustomJsonSerializer())
     .OpenProducersConnectionsOnHostStartup();
 
 //builder.Services.AddHostedService<TopicExchangeExample>();
-builder.Services.AddHostedService<BasicQueueExample>();
-//builder.Services.AddHostedService<RetryExampleWorker>();
+//builder.Services.AddHostedService<BasicQueueExample>();
+builder.Services.AddHostedService<RetryExampleWorker>();
 
 var host = builder.Build();
 host.Run();

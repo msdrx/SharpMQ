@@ -16,14 +16,18 @@ public class RetryExampleWorker : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
 
-    public RetryExampleWorker(ILogger<RetryExampleWorker> logger, IConfiguration configuration, IServiceProvider serviceProvider)
+    private readonly IProducer _producer;
+
+
+    public RetryExampleWorker(ILogger<RetryExampleWorker> logger, IConfiguration configuration, IServiceProvider serviceProvider, IProducer producer)
     {
         _logger = logger;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
+        _producer = producer;
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var serverConfig = _configuration.GetRequiredSection("ServerTest").Get<RabbitMqServerConfig>();
         var consumerConfig = _configuration.GetRequiredSection("RetryExampleConsumer").Get<ConsumerConfig>();
@@ -71,7 +75,18 @@ public class RetryExampleWorker : BackgroundService
         _logger.LogInformation("Retry configuration: 5s -> 15s -> 1m");
         _logger.LogInformation("Queue names created: retry.example.RetryQ.5s, retry.example.RetryQ.15s, retry.example.RetryQ.1m");
 
-        return Task.CompletedTask;
+        await Task.Delay(TimeSpan.FromMicroseconds(100));
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await _producer.PublishAsync("retry.example.direct", "retry.example", new TestMessage()
+            {
+                Amount = Random.Shared.Next(0, 10000),
+                Account = "XXX"
+            });
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
     }
 
     public override Task StopAsync(CancellationToken cancellationToken)

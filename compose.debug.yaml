@@ -1,0 +1,12 @@
+services:
+  sample.app:
+    build:
+      args:
+        - configuration=Debug
+    user: root
+    cap_add:
+      - SYS_PTRACE
+    environment:
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+    volumes:
+      - ~/.vsdbg:/remote_debugger:rw
